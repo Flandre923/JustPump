@@ -1,0 +1,8 @@
+{
+  "itemGroup.examplemod": "Example Mod Tab",
+  "block.examplemod.example_block": "Example Block",
+  "item.examplemod.example_item": "Example Item",
+  "mode.examplemod.range": "Range Extraction",
+  "mode.examplemod.auto": "Auto Extraction",
+  "mode.examplemod.filling": "Fluid Filling"
+}
