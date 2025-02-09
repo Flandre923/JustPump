@@ -69,36 +69,21 @@ public class FluidResult {
     }
 
 
-    public List<BlockPos> getFluidPositions(int max) {
-        return positions.stream()
-                .filter(pos -> !usedPositions.contains(pos))
-                .limit(max)
-                .collect(Collectors.toList());
-    }
-
-    public void updateAfterDrain(int drained) {
-        if (!isInfinite) {
-            synchronized (positions) {
-                int actualDrained = Math.min(drained / FluidType.BUCKET_VOLUME, positions.size());
-                positions.subList(0, actualDrained).clear();
-            }
-        }
-    }
-
     public String debugReport() {
         return String.format("""
-            Fluid Cluster Scan Completed!
-            Status: %s
-            Source Blocks: %d
-            First Position: %s
-            Last Position: %s
-            """,
-            isInfinite ? "INFINITE" : "FINITE",
-            positions.size(),
-            isInfinite ? "N/A" : Helper.posToString(positions.get(0)),
-            isInfinite ? "N/A" : Helper.posToString(positions.get(positions.size()-1))
+        Fluid Cluster Scan Completed!
+        Status: %s
+        Source Blocks: %d
+        First Position: %s
+        Last Position: %s
+        """,
+                isInfinite ? "INFINITE" : "FINITE",
+                positions.size(),
+                (isInfinite || positions.isEmpty()) ? "N/A" : Helper.posToString(positions.get(0)),
+                (isInfinite || positions.isEmpty()) ? "N/A" : Helper.posToString(positions.get(positions.size()-1))
         );
     }
+
 
     public PumpMode getMode() {
         return PumpMode.EXTRACTING_AUTO;
@@ -114,12 +99,6 @@ public class FluidResult {
 
     public List<BlockPos> getAllPositions() {
         return Collections.unmodifiableList(positions);
-    }
-
-    private final Set<BlockPos> usedPositions = ConcurrentHashMap.newKeySet();
-
-    public void markPositionUsed(BlockPos pos) {
-        usedPositions.add(pos);
     }
 
 }

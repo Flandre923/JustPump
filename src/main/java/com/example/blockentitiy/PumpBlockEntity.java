@@ -77,11 +77,12 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         }
     }
 
-    private static class FluidTank {
+    private class FluidTank {
         private static final int CAPACITY = FluidType.BUCKET_VOLUME * 16; // 16000
         private Fluid fluidType = Fluids.EMPTY;
         private int amount = 0;
-
+        private static final String FLUID_TYPE_KEY = "FluidType";
+        private static final String AMOUNT_KEY = "Amount";
         boolean isEmpty() {
             return amount <= 0;
         }
@@ -107,6 +108,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
 
             int actualFill = Math.min(quantity, getRemainingSpace());
             amount += actualFill;
+            PumpBlockEntity.this.setChanged();
             return actualFill;
         }
 
@@ -118,8 +120,26 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             if (isEmpty()) {
                 fluidType = Fluids.EMPTY;
             }
-
+            PumpBlockEntity.this.setChanged();
             return stack;
+        }
+
+        public CompoundTag writeToNBT() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString(FLUID_TYPE_KEY, BuiltInRegistries.FLUID.getKey(fluidType).toString());
+            tag.putInt(AMOUNT_KEY, amount);
+            return tag;
+        }
+
+        public void readFromNBT(CompoundTag tag) {
+            ResourceLocation fluidId = ResourceLocation.parse(tag.getString(FLUID_TYPE_KEY));
+            fluidType = BuiltInRegistries.FLUID.get(fluidId);
+            if (fluidType == null) fluidType = Fluids.EMPTY;
+
+            amount = tag.getInt(AMOUNT_KEY);
+            // 确保数值合法
+            if (amount < 0) amount = 0;
+            if (amount > CAPACITY) amount = CAPACITY;
         }
     }
     private final FluidTank tank = new FluidTank();
@@ -241,23 +261,6 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         );
     }
 
-    private void processStorageQueue() {
-        if (currentResult == null) return;
-
-        currentResult.getFluidPositions(INTERNAL_STORAGE_BUCKETS - pendingPositions.size()).forEach(pos -> {
-            if (level == null) return;
-
-            FluidState state = level.getFluidState(pos);
-            if (state.isSource() && !isPositionQueued(pos)) {
-                synchronized (pendingPositions) {
-                    if (pendingPositions.size() < INTERNAL_STORAGE_BUCKETS) {
-                        pendingPositions.add(new FluidPosition(state.getType(), pos));
-                        currentResult.markPositionUsed(pos);
-                    }
-                }
-            }
-        });
-    }
     private boolean isPositionQueued(BlockPos pos) {
         return pendingPositions.stream().anyMatch(e -> e.pos.equals(pos));
     }
@@ -307,22 +310,27 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     private void tick() {
         if (level == null || level.isClientSide) return;
 
-        // 处理存储队列
-        processStorageQueue();
-
-        // 处理Tank填充
+        // 修改后的处理Tank填充逻辑
         if (!tank.isFull() && !pendingPositions.isEmpty()) {
-            FluidPosition next = pendingPositions.peek();
+            synchronized (pendingPositions) { // 增加同步块保证线程安全
+                FluidPosition next = pendingPositions.peek();
+                if (tank.canAccept(next.type)) {
+                    // 先执行流体填充
+                    tank.fill(next.type, FluidType.BUCKET_VOLUME);
 
-            if (tank.canAccept(next.type)) {
-                pendingPositions.poll();
-                if (!currentResult.isInfinite())
-                {
-                    removeFluidBlock(next.pos);
+                    // 根据是否无限资源处理队列元素
+                    if (currentResult != null && !currentResult.isInfinite()) {
+                        pendingPositions.poll(); // 移除队列元素
+                        removeFluidBlock(next.pos); // 移除实际方块
+                    } else {
+                        // 无限资源时轮转队列元素：移除并重新添加至队尾
+                        FluidPosition recycled = pendingPositions.poll();
+                        pendingPositions.offer(recycled);
+                    }
                 }
-                tank.fill(next.type, FluidType.BUCKET_VOLUME);
             }
         }
+
 
         if(scanning)
         {
@@ -392,6 +400,21 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         this.markParametersDirty();
         this.setChanged();
     }
+    private void processScanResult(FluidResult result) {
+        if (level instanceof ServerLevel) {
+            result.getAllPositions().forEach(pos -> {
+                FluidState state = level.getFluidState(pos);
+                if (state.isSource()) {
+                    synchronized (pendingPositions) {
+                        if (pendingPositions.size() < INTERNAL_STORAGE_BUCKETS && !isPositionQueued(pos)) {
+                            pendingPositions.add(new FluidPosition(state.getType(), pos));
+                        }
+                    }
+                }
+            });
+        }
+        handleScanResult();
+    }
 
     private void startAutoScan() {
         resetScanners();
@@ -400,6 +423,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             fluidClusterScanner = new ClusterFluidScanner(level, startPos);
             fluidClusterScanner.setProgressListener(result -> {
                 currentResult = result;
+                processScanResult(result);
                 handleScanResult();
                 scanning = false;
                 scanComplete = true;
@@ -430,6 +454,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         this.cuboidFluidScanner = new CuboidFluidScanner(level, start, end,this.currentArea,this.currentOffset);
         cuboidFluidScanner.setProgressListener(result -> {
             currentResult = result;
+            processScanResult(result);
             handleScanResult();
             scanning = false;
             scanComplete = true;
@@ -439,7 +464,6 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
 
         this.scanning = true;
         this.scanComplete = false;
-        // 启动新扫描
         cuboidFluidScanner.startScan();
         this.setChanged();
     }
@@ -518,9 +542,9 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
 
-        CompoundTag tankTag = tag.getCompound("Tank");
-        tank.fluidType = BuiltInRegistries.FLUID.get(ResourceLocation.parse(tankTag.getString("Fluid")));
-        tank.amount = tankTag.getInt("Amount");
+        if (tag.contains("Tank")) {
+            tank.readFromNBT(tag.getCompound("Tank"));
+        }
 
         ListTag queueTag = tag.getList("Queue", Tag.TAG_COMPOUND);
         queueTag.forEach(entry -> {
@@ -551,10 +575,8 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
 
-        CompoundTag tankTag = new CompoundTag();
-        tankTag.putString("Fluid", BuiltInRegistries.FLUID.getKey(tank.fluidType).toString());
-        tankTag.putInt("Amount", tank.amount);
-        tag.put("Tank", tankTag);
+        tag.put("Tank", tank.writeToNBT());
+
         ListTag queueTag = new ListTag();
         pendingPositions.forEach(pos -> {
             CompoundTag entry = new CompoundTag();

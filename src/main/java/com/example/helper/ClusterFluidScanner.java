@@ -40,7 +40,7 @@ public class ClusterFluidScanner extends FluidScanner{
         BlockPos.MutableBlockPos checkPos = startPos.mutable();
         while (checkPos.getY() >= level.getMinBuildHeight()) {
             FluidState state = level.getFluidState(checkPos);
-            if (state.isSource()) {
+            if (!state.isEmpty()) {
                 targetFluid = state;
                 scanQueue.add(checkPos.immutable());
                 scanned.add(checkPos.immutable());
@@ -72,35 +72,44 @@ public class ClusterFluidScanner extends FluidScanner{
     }
 
     private void processBlock(BlockPos pos) {
-        if (foundPositions.add(pos)) { // 仅添加新位置
-            checkForNeighbors(pos);
+        if (isSource(pos)) { // 仅添加源头到结果列表
+            foundPositions.add(pos);
         }
+        // 无论是否源头都进行扩散扫描
+        checkForNeighbors(pos);
     }
 
     private void checkForNeighbors(BlockPos pos) {
         for (Direction dir : Direction.values()) {
-            if (dir == Direction.DOWN) continue; // 优先向下扫描
-
             BlockPos neighborPos = pos.relative(dir);
-            if (isValidFluid(neighborPos) && !scanned.contains(neighborPos)) {
+
+            // 使用isFluidAny代替isValidFluid
+            if (isFluidAny(neighborPos) && !scanned.contains(neighborPos)) {
                 scanned.add(neighborPos);
                 scanQueue.add(neighborPos);
             }
         }
 
-        // 最后检查下方方块
+        // 特殊处理向下扫描
         BlockPos downPos = pos.below();
-        if (isValidFluid(downPos) && !scanned.contains(downPos)) {
+        if (isFluidAny(downPos) && !scanned.contains(downPos)) {
             scanned.add(downPos);
             scanQueue.add(downPos);
         }
     }
-
-    private boolean isValidFluid(BlockPos pos) {
-        return pos.getY() >= level.getMinBuildHeight() &&
-                level.getFluidState(pos).isSource() &&
-                level.getFluidState(pos).is(targetFluid.getType());
+    private boolean isSource(BlockPos pos) {
+        return level.getFluidState(pos).isSource();
     }
+
+
+    private boolean isFluidAny(BlockPos pos) {
+        if (pos.getY() < level.getMinBuildHeight()) return false;
+
+        FluidState state = level.getFluidState(pos);
+        return !state.isEmpty() &&
+                state.getType().getFluidType() == targetFluid.getType().getFluidType();
+    }
+
 
     private void markAsInfinite() {
         isInfinite = true;
