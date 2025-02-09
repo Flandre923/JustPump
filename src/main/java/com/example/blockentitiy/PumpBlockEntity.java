@@ -3,6 +3,8 @@ package com.example.blockentitiy;
 import com.example.ExampleMod;
 import com.example.helper.CuboidFluidScanner;
 import com.example.helper.ClusterFluidScanner;
+import com.example.helper.FluidFillScanner;
+import com.example.helper.Helper;
 import com.example.helper.data.FluidResult;
 import com.example.menu.PumpMenu;
 import com.example.reg.BlockEntityRegister;
@@ -34,6 +36,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
+import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
@@ -59,6 +62,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     private BlockPos currentArea = new BlockPos(10, 10, 10);
     private BlockPos currentOffset = BlockPos.ZERO;
     private static final int INTERNAL_STORAGE_BUCKETS = 16;
+    private FluidFillScanner fluidFillScanner;
 
     public PumpBlockEntity(BlockPos pos, BlockState state) {
         this(BlockEntityRegister.PUMP_BE.get(), pos, state);
@@ -96,7 +100,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         }
 
         boolean canAccept(Fluid fluid) {
-            return isEmpty() || fluid.isSame(fluidType);
+            return isEmpty() ||  fluid.isSame(fluidType);
         }
 
         int fill(Fluid fluid, int quantity) {
@@ -123,6 +127,13 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             PumpBlockEntity.this.setChanged();
             return stack;
         }
+
+        public void clear()
+        {
+            amount = 0;
+            fluidType = Fluids.EMPTY;
+        }
+
 
         public CompoundTag writeToNBT() {
             CompoundTag tag = new CompoundTag();
@@ -176,15 +187,38 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
 
         @Override
         public boolean isFluidValid(int tank, FluidStack stack) {
-            return tank == 0 && (pump.currentResult == null ||
-                    stack.getFluid() == pump.getFluidType());
+            return pump.currentResult != null && (stack.getFluid() == pump.getFluidType() || pump.getFluidType() == Fluids.EMPTY);
         }
 
         @Override
         public int fill(FluidStack resource, FluidAction action) {
             if (!isValidForInput() || !isFluidValid(0, resource)) return 0;
-            //TODO
-            return 0;
+
+            synchronized (pump.tank)
+            {
+                // 检查流体类型兼容性
+                if (!pump.tank.canAccept(resource.getFluid())) {
+                    return 0;
+                }
+                // 计算实际可填充量
+                int transferable = Math.min(
+                        resource.getAmount(),
+                        pump.tank.getRemainingSpace()
+                );
+
+                if (transferable <= 0) return 0;
+
+                // 执行实际填充
+                if (action.execute()) {
+                    int actualFilled = pump.tank.fill(
+                            resource.getFluid(),
+                            transferable
+                    );
+
+                    return actualFilled;
+                }
+                return transferable; // 模拟时返回可填充量
+            }
         }
 
         @Override
@@ -288,6 +322,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     public PumpMode getPumpMode() {
         return pumpMode;
     }
+
     private void removeFluidBlock(BlockPos pos) {
         if (level == null || level.isClientSide()) return;
 
@@ -311,7 +346,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         if (level == null || level.isClientSide) return;
 
         // 修改后的处理Tank填充逻辑
-        if (!tank.isFull() && !pendingPositions.isEmpty()) {
+        if (this.pumpMode.isExtracting() && !tank.isFull() && !pendingPositions.isEmpty()) {
             synchronized (pendingPositions) { // 增加同步块保证线程安全
                 FluidPosition next = pendingPositions.peek();
                 if (tank.canAccept(next.type)) {
@@ -330,7 +365,10 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
                 }
             }
         }
-
+        //
+        if (this.pumpMode == PumpMode.FILLING && scanComplete && !pendingPositions.isEmpty()) {
+            handleFillingMode();
+        }
 
         if(scanning)
         {
@@ -357,6 +395,10 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         if (fluidClusterScanner != null) {
             fluidClusterScanner.reset();
             fluidClusterScanner = null;
+        }
+        if (fluidFillScanner != null) {
+            fluidFillScanner.reset();
+            fluidFillScanner = null;
         }
     }
 
@@ -394,6 +436,36 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         }
 
     }
+
+    private void startFillScan() {
+        resetScanners();
+        Pair<BlockPos, BlockPos> scanRange = Helper.calculateScanRange(
+                getBlockPos(),
+                currentArea,
+                currentOffset
+        );
+        pendingPositions.clear();
+        fluidFillScanner = new FluidFillScanner(level, scanRange.first(), scanRange.second());
+        fluidFillScanner.setProgressListener(result -> {
+            if (result!=null) {
+                // 将扫描结果加入填充队列
+                result.getAllPositions().forEach(pos -> {
+                    if (!isPositionQueued(pos)) {
+                        pendingPositions.add(new FluidPosition(tank.fluidType, pos));
+                    }
+                });
+                scanComplete = true;
+                this.setChanged();
+            }
+        });
+
+        this.scanning = true;
+        this.scanComplete = false;
+        fluidFillScanner.startScan();
+        this.setChanged();
+    }
+
+
     public void updateParameters(int xr, int ye, int zr, int xo, int yo, int zo) {
         this.currentArea = new BlockPos(xr, ye, zr);
         this.currentOffset = new BlockPos(xo, yo, zo);
@@ -406,7 +478,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
                 FluidState state = level.getFluidState(pos);
                 if (state.isSource()) {
                     synchronized (pendingPositions) {
-                        if (pendingPositions.size() < INTERNAL_STORAGE_BUCKETS && !isPositionQueued(pos)) {
+                        if (!isPositionQueued(pos)) {
                             pendingPositions.add(new FluidPosition(state.getType(), pos));
                         }
                     }
@@ -441,17 +513,12 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
 
     private void startRangeScan() {
         resetScanners(); // 根据参数计算新的扫描范围
-        BlockPos basePos = getBlockPos();
-        int xo = this.currentOffset.getX();
-        int yo = this.currentOffset.getY();
-        int zo = this.currentOffset.getZ();
-        int xr = this.currentArea.getX();
-        int ye = this.currentArea.getY();
-        int zr = this.currentArea.getZ();
-        BlockPos centerPos = basePos.offset(xo,yo,zo);
-        BlockPos start = centerPos.offset(-xr, yo, -zr);
-        BlockPos end = centerPos.offset(xr, -ye, zr);
-        this.cuboidFluidScanner = new CuboidFluidScanner(level, start, end,this.currentArea,this.currentOffset);
+        Pair<BlockPos, BlockPos> scanRange = Helper.calculateScanRange(
+                getBlockPos(),
+                currentArea,
+                currentOffset
+        );
+        this.cuboidFluidScanner = new CuboidFluidScanner(level, scanRange.first(), scanRange.second(),this.currentArea,this.currentOffset);
         cuboidFluidScanner.setProgressListener(result -> {
             currentResult = result;
             processScanResult(result);
@@ -472,12 +539,6 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     public Fluid getFluidType() {
         return tank.fluidType;
     }
-    private void startFillScan() {
-        // 填充模式扫描逻辑
-        this.scanning = true;
-        this.scanComplete = false;
-        // TODO: 实现具体填充扫描逻辑
-    }
 
     private void handleAutoModeScan() {
         if (fluidClusterScanner != null) {
@@ -493,6 +554,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         this.scanComplete = false;
         this.scanning = false;
         this.setChanged();
+        this.tank.clear();
     }
 
 
@@ -508,9 +570,61 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             scanComplete = true;
         }
     }
-    private void fillOutput() {
 
+    private void fillOutput() {
+        if (fluidFillScanner != null && fluidFillScanner.isScanning()) {
+            fluidFillScanner.tick();
+        }
     }
+
+
+    private void handleFillingMode() {
+        if (pumpMode != PumpMode.FILLING) return;
+        if (tank.isEmpty() || tank.amount < FluidType.BUCKET_VOLUME) return; // 需要至少1000mB（1桶）
+
+        synchronized (pendingPositions) {
+            Iterator<FluidPosition> iterator = pendingPositions.iterator();
+            while (iterator.hasNext()) {
+                FluidPosition position = iterator.next();
+
+                // 检查位置是否有效
+                if (level.getBlockState(position.pos).canBeReplaced()) {
+                    // 尝试放置流体源
+                    if (tryPlaceFluidSource(tank.fluidType, position.pos)) {
+                        // 成功放置后扣除流体量
+                        tank.drain(FluidType.BUCKET_VOLUME);
+                        iterator.remove(); // 从队列移除已处理位置
+                        return; // 每tick只处理一个位置
+                    }
+                } else {
+                    iterator.remove(); // 移除无效位置
+                }
+            }
+        }
+    }
+
+    public boolean tryPlaceFluidSource(Fluid fluid, BlockPos pos) {
+        if (fluid == null || fluid == Fluids.EMPTY) return false;
+        if (!(level instanceof ServerLevel serverLevel)) return false;
+
+        // 通过FluidState获取方块状态
+        FluidState fluidState = fluid.defaultFluidState();
+        BlockState targetState = fluidState.createLegacyBlock(); // 使用FluidState的公共方法
+
+        // 检查目标方块是否有效
+        if (targetState.isAir()) return false;
+
+        // 可替换性检查
+        BlockState currentState = serverLevel.getBlockState(pos);
+        if (!currentState.isAir() && !currentState.canBeReplaced()) return false;
+
+        boolean success = serverLevel.setBlock(pos,targetState,Block.UPDATE_ALL | Block.UPDATE_NEIGHBORS);
+        return success;
+    }
+
+
+
+
     public void markParametersDirty() {
         setChanged();
     }
