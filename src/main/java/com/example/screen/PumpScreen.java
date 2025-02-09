@@ -7,6 +7,7 @@ import com.example.menu.PumpMenu;
 import com.example.network.ModeUpdatePayload;
 import com.example.network.ScanAreaPayload;
 import com.example.network.ScanStartPayload;
+import com.example.network.ToggleRangePayload;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -15,7 +16,6 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -45,27 +45,21 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     @Override
     protected void init() {
         super.init();
-
         // 左侧区域：按钮和状态
         int leftX = this.leftPos + 10;
         int buttonWidth = 25;
-
         // 模式切换按钮
         addRenderableWidget(Button.builder(Component.translatable("button.mode"), button -> cycleMode())
                 .bounds(leftX, this.topPos + 35, buttonWidth, 15)
                 .build());
-
         // 开始扫描按钮
         addRenderableWidget(Button.builder(Component.translatable("button.scan"), button -> onScanClicked())
                 .bounds(leftX, this.topPos + 65, buttonWidth, 15)
                 .build());
-
         // 右侧区域：输入框
         int rightX = this.leftPos + 130;
         int inputWidth = 50;
         int inputHeight = 20;
-
-
         // 范围输入框
         createInputFields();
         // 设置默认值
@@ -77,7 +71,9 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         zOffset.setValue("0");
 
         // 显示范围按钮
-        showRangeButton = Button.builder(Component.translatable("button.show_range"), button -> {})
+        showRangeButton = Button.builder(Component.translatable("button.show_range"), button -> {
+                    PacketDistributor.sendToServer(new ToggleRangePayload(this.blockEntity.getBlockPos(),ToggleRangePayload.TOGGLE));
+                })
                 .bounds(rightX, this.topPos + 80, 130, 20)
                 .build();
 

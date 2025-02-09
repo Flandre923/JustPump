@@ -1,6 +1,9 @@
 package com.example.blockentitiy;
 
 import com.example.ExampleMod;
+import com.example.block.Pump;
+import com.example.blockentitiy.help.SimpleSwitch;
+import com.example.blockentitiy.visiable.VisiableHelper;
 import com.example.helper.CuboidFluidScanner;
 import com.example.helper.ClusterFluidScanner;
 import com.example.helper.FluidFillScanner;
@@ -8,6 +11,7 @@ import com.example.helper.Helper;
 import com.example.helper.data.FluidResult;
 import com.example.menu.PumpMenu;
 import com.example.reg.BlockEntityRegister;
+import com.example.reg.BlockRegister;
 import it.unimi.dsi.fastutil.Pair;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -63,6 +67,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     private BlockPos currentOffset = BlockPos.ZERO;
     private static final int INTERNAL_STORAGE_BUCKETS = 16;
     private FluidFillScanner fluidFillScanner;
+
 
     public PumpBlockEntity(BlockPos pos, BlockState state) {
         this(BlockEntityRegister.PUMP_BE.get(), pos, state);
@@ -155,6 +160,37 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     }
     private final FluidTank tank = new FluidTank();
     private final Queue<FluidPosition> pendingPositions = new LinkedList<>();
+
+    // 范围显示
+    public SimpleSwitch areaDisplay = new SimpleSwitch();
+
+    public SimpleSwitch getAreaDisplay()
+    {
+        return areaDisplay;
+    }
+
+    public void switchAreaDisplay(){
+        areaDisplay.toggle();
+        setChanged();
+        Pair<BlockPos,BlockPos> area = Helper.calculateScanRange(this.getBlockPos(),this.currentArea,this.currentOffset);
+        if(areaDisplay.isActive())
+        {
+            VisiableHelper.placeHollowCube(level, BlockRegister.VISIABLE_BLOCK.get(),area.first(),area.second());
+        }
+        else
+        {
+            VisiableHelper.removeHollowCube(level,BlockRegister.VISIABLE_BLOCK.get(),area.first(),area.second());
+        }
+    }
+
+    public void closeDisplay(){
+        if(this.areaDisplay.isActive())
+        {
+            Pair<BlockPos,BlockPos> area = Helper.calculateScanRange(this.getBlockPos(),this.currentArea,this.currentOffset);
+            this.areaDisplay.toggle();
+            VisiableHelper.removeHollowCube(level,BlockRegister.VISIABLE_BLOCK.get(),area.first(),area.second());
+        }
+    }
 
     // 方向感知的流体处理器
     private static class DirectionalFluidHandler implements IFluidHandler {
@@ -370,6 +406,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             handleFillingMode();
         }
 
+
         if(scanning)
         {
             switch(pumpMode)
@@ -424,7 +461,28 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     public void handleArea(PumpMode mode, int xRadius, int yExtend, int zRadius,
                            int xOffset, int yOffset, int zOffset)
     {
+        if (areaDisplay.isActive()) {
+            Pair<BlockPos, BlockPos> oldArea = Helper.calculateScanRange(
+                    this.getBlockPos(),
+                    this.currentArea,
+                    this.currentOffset
+            );
+            VisiableHelper.removeHollowCube(level, BlockRegister.VISIABLE_BLOCK.get(),
+                    oldArea.first(), oldArea.second());
+        }
+
         updateParameters(xRadius, yExtend, zRadius, xOffset, yOffset, zOffset);
+
+        // 如果显示需要保持激活状态，显示新范围
+        if (areaDisplay.isActive()) {
+            Pair<BlockPos, BlockPos> newArea = Helper.calculateScanRange(
+                    this.getBlockPos(),
+                    this.currentArea,
+                    this.currentOffset
+            );
+            VisiableHelper.placeHollowCube(level, BlockRegister.VISIABLE_BLOCK.get(),
+                    newArea.first(), newArea.second());
+        }
     }
     public void handleScan(PumpMode mode) {
         if (level == null || level.isClientSide) return;
@@ -549,6 +607,22 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     }
 
     public void switchMode() {
+        if (areaDisplay.isActive() && level != null) {
+            Pair<BlockPos, BlockPos> currentArea = Helper.calculateScanRange(
+                    getBlockPos(),
+                    this.currentArea,
+                    this.currentOffset
+            );
+            VisiableHelper.removeHollowCube(
+                    level,
+                    BlockRegister.VISIABLE_BLOCK.get(),
+                    currentArea.first(),
+                    currentArea.second()
+            );
+            areaDisplay.setActive(false); // 直接设置状态为关闭
+            setChanged(); // 确保状态保存
+        }
+
         resetScanners();
         this.pumpMode = pumpMode.next();
         this.scanComplete = false;
@@ -655,6 +729,19 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        // 加载泵模式
+        if (tag.contains("PumpMode")) {
+            try {
+                pumpMode = PumpMode.valueOf(tag.getString("PumpMode"));
+            } catch (IllegalArgumentException e) {
+                pumpMode = PumpMode.EXTRACTING_AUTO; // 默认值
+            }
+        }
+
+        if (tag.contains("AreaDisplay"))
+        {
+            areaDisplay.fromNBT(tag.getCompound("AreaDisplay"));
+        }
 
         if (tag.contains("Tank")) {
             tank.readFromNBT(tag.getCompound("Tank"));
@@ -667,7 +754,6 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             BlockPos pos = NbtUtils.readBlockPos(posTag, "Pos").orElse(BlockPos.ZERO);
             pendingPositions.add(new FluidPosition(fluid, pos));
         });
-
 
         if (tag.contains("ScanParams")) {
             CompoundTag params = tag.getCompound("ScanParams");
@@ -688,7 +774,9 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.putString("PumpMode", pumpMode.name());
 
+        tag.put("AreaDisplay", areaDisplay.toNBT());
         tag.put("Tank", tank.writeToNBT());
 
         ListTag queueTag = new ListTag();

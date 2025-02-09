@@ -1,6 +1,8 @@
 package com.example.block;
 
 import com.example.blockentitiy.PumpBlockEntity;
+import com.example.network.ModeUpdatePayload;
+import com.example.network.ScanStartPayload;
 import com.example.reg.BlockEntityRegister;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
@@ -27,9 +29,10 @@ public class Pump extends BaseEntityBlock {
         if(!level.isClientSide && player instanceof ServerPlayer serverPlayer)
         {
             BlockEntity be = level.getBlockEntity(pos);
-            if(be instanceof MenuProvider menuProvider)
+            if(be instanceof PumpBlockEntity menuProvider)
             {
                 serverPlayer.openMenu(menuProvider,buf->buf.writeBlockPos(pos));
+                PacketDistributor.sendToPlayer(serverPlayer,new ModeUpdatePayload(pos,menuProvider.getPumpMode()));
                 return InteractionResult.CONSUME;
             }
         }
