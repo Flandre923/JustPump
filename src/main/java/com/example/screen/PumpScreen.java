@@ -85,29 +85,31 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     private void createInputFields() {
         int rightX = this.leftPos + 130;
         int inputWidth = 50;
-        int inputHeight = 20;
 
-        // 前三个（范围输入框）- 仅允许非负整数
-        xRadius = createNumberInput(rightX, this.topPos + 20, inputWidth, "X半径", false);
-        yExtend = createNumberInput(rightX + 60, this.topPos + 20, inputWidth, "Y延伸", false);
-        zRadius = createNumberInput(rightX + 120, this.topPos + 20, inputWidth, "Z半径", false);
+        // 范围输入框（X半径0-64，Y延伸0-100，Z半径0-64）
+        xRadius = createNumberInput(rightX, this.topPos + 20, inputWidth, "X半径", false, 64);
+        yExtend = createNumberInput(rightX + 60, this.topPos + 20, inputWidth, "Y延伸", false, 100);
+        zRadius = createNumberInput(rightX + 120, this.topPos + 20, inputWidth, "Z半径", false, 64);
 
-        // 后三个（偏移输入框）- 允许负数
-        xOffset = createNumberInput(rightX, this.topPos + 50, inputWidth, "X偏移", true);
-        yOffset = createNumberInput(rightX + 60, this.topPos + 50, inputWidth, "Y偏移", true);
-        zOffset = createNumberInput(rightX + 120, this.topPos + 50, inputWidth, "Z偏移", true);
+        // 偏移输入框（允许负数，不做额外限制）
+        xOffset = createNumberInput(rightX, this.topPos + 50, inputWidth, "X偏移", true, Integer.MAX_VALUE);
+        yOffset = createNumberInput(rightX + 60, this.topPos + 50, inputWidth, "Y偏移", true, Integer.MAX_VALUE);
+        zOffset = createNumberInput(rightX + 120, this.topPos + 50, inputWidth, "Z偏移", true, Integer.MAX_VALUE);
     }
     // 修改后的创建方法（添加allowNegative参数）
-    private EditBox createNumberInput(int x, int y, int width, String label, boolean allowNegative) {
+    private EditBox createNumberInput(int x, int y, int width, String label,
+                                      boolean allowNegative, int maxValue) {
         EditBox box = new EditBox(this.font, x, y, width, 20, Component.literal(label));
-        box.setMaxLength(allowNegative ? 4 : 3); // 负数多一位符号位
+        box.setMaxLength(allowNegative ? 4 : String.valueOf(maxValue).length());
 
         // 根据参数设置不同过滤规则
-        if(allowNegative) {
-            box.setFilter(s -> s.matches("^-?\\d*$")); // 允许负号
-        } else {
-            box.setFilter(s -> s.matches("^\\d*$"));     // 仅数字
-        }
+        box.setFilter(s -> {
+            if (allowNegative) {
+                return s.matches("^-?\\d*$");
+            } else {
+                return s.matches("^\\d*$");
+            }
+        });
 
         box.setResponder(input -> {
             if (input.isEmpty() || (allowNegative && input.equals("-"))) return;
@@ -116,15 +118,17 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
                 int value = Integer.parseInt(input);
 
                 // 非负数输入框自动校正
-                if(!allowNegative && value < 0) {
-                    box.setValue("0");
-                    return;
+                if (!allowNegative) {
+                    value = Math.max(value, 0);
                 }
 
-                // 通用范围限制
-                int max = allowNegative ? 999 : 999;
-                if(Math.abs(value) > max) {
-                    box.setValue(String.valueOf(max * (value < 0 ? -1 : 1)));
+                // 应用不同范围限制
+                int clampedValue = allowNegative ?
+                        Math.min(Math.abs(value), 999) * (value < 0 ? -1 : 1) :
+                        Math.min(value, maxValue);
+
+                if (value != clampedValue) {
+                    box.setValue(String.valueOf(clampedValue));
                 }
             } catch (NumberFormatException e) {
                 box.setValue(allowNegative ? "-0" : "0");
