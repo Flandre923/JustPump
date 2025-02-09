@@ -29,12 +29,12 @@ public class Helper {
         int zOffset = offset.getZ();
 
         // 计算中心点
-        BlockPos center = basePos.offset(xOffset, yOffset, zOffset);
+        BlockPos center = basePos.offset(xOffset, yOffset-1, zOffset);
 
         // 计算扫描范围
         BlockPos start = center.offset(
                 -xRadius,       // X轴负向扩展
-                yOffset,        // 保持原始Y偏移
+                0,        // 保持原始Y偏移
                 -zRadius        // Z轴负向扩展
         );
 

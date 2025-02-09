@@ -67,13 +67,7 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
 
 
         // 范围输入框
-        xRadius = createNumberInput(rightX, this.topPos + 20, inputWidth, "X半径");
-        yExtend = createNumberInput(rightX + 60, this.topPos + 20, inputWidth, "Y延伸");
-        zRadius = createNumberInput(rightX + 120, this.topPos + 20, inputWidth, "Z半径");
-        // 偏移输入框
-        xOffset = createNumberInput(rightX, this.topPos + 50, inputWidth, "X偏移");
-        yOffset = createNumberInput(rightX + 60, this.topPos + 50, inputWidth, "Y偏移");
-        zOffset = createNumberInput(rightX + 120, this.topPos + 50, inputWidth, "Z偏移");
+        createInputFields();
         // 设置默认值
         xRadius.setValue("10");
         yExtend.setValue("10");
@@ -92,29 +86,52 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         updateStatusText();
     }
 
+    private void createInputFields() {
+        int rightX = this.leftPos + 130;
+        int inputWidth = 50;
+        int inputHeight = 20;
 
-    private EditBox createNumberInput(int x, int y, int width, String label) {
+        // 前三个（范围输入框）- 仅允许非负整数
+        xRadius = createNumberInput(rightX, this.topPos + 20, inputWidth, "X半径", false);
+        yExtend = createNumberInput(rightX + 60, this.topPos + 20, inputWidth, "Y延伸", false);
+        zRadius = createNumberInput(rightX + 120, this.topPos + 20, inputWidth, "Z半径", false);
+
+        // 后三个（偏移输入框）- 允许负数
+        xOffset = createNumberInput(rightX, this.topPos + 50, inputWidth, "X偏移", true);
+        yOffset = createNumberInput(rightX + 60, this.topPos + 50, inputWidth, "Y偏移", true);
+        zOffset = createNumberInput(rightX + 120, this.topPos + 50, inputWidth, "Z偏移", true);
+    }
+    // 修改后的创建方法（添加allowNegative参数）
+    private EditBox createNumberInput(int x, int y, int width, String label, boolean allowNegative) {
         EditBox box = new EditBox(this.font, x, y, width, 20, Component.literal(label));
-        box.setMaxLength(3);
-        box.setFilter(s -> s.matches("^\\d*$")); // 修改正则表达式
+        box.setMaxLength(allowNegative ? 4 : 3); // 负数多一位符号位
 
-        // 添加实时数值修正
+        // 根据参数设置不同过滤规则
+        if(allowNegative) {
+            box.setFilter(s -> s.matches("^-?\\d*$")); // 允许负号
+        } else {
+            box.setFilter(s -> s.matches("^\\d*$"));     // 仅数字
+        }
+
         box.setResponder(input -> {
-            if (input.isEmpty()) {
-                box.setValue("0"); // 处理空输入的情况
-                return;
-            }
+            if (input.isEmpty() || (allowNegative && input.equals("-"))) return;
 
             try {
                 int value = Integer.parseInt(input);
-                if (value > 100) {
-                    box.setValue("100");
-                } else if (input.startsWith("0") && input.length() > 1) {
-                    // 处理前导零（如01 -> 1）
-                    box.setValue(String.valueOf(value));
+
+                // 非负数输入框自动校正
+                if(!allowNegative && value < 0) {
+                    box.setValue("0");
+                    return;
+                }
+
+                // 通用范围限制
+                int max = allowNegative ? 999 : 999;
+                if(Math.abs(value) > max) {
+                    box.setValue(String.valueOf(max * (value < 0 ? -1 : 1)));
                 }
             } catch (NumberFormatException e) {
-                box.setValue("0");
+                box.setValue(allowNegative ? "-0" : "0");
             }
         });
 
@@ -135,10 +152,10 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         showRangeButton.visible = showFields;
     }
 
-    private int parseInt(String value) {
+    private int parseInt(String value, boolean allowNegative) {
         try {
             int num = Integer.parseInt(value.isEmpty() ? "0" : value);
-            return Math.min(Math.max(num, 0), 100); // 限制数值在0-100之间
+            return allowNegative ? num : Math.max(num, 0);
         } catch (NumberFormatException e) {
             return 0;
         }
@@ -287,13 +304,15 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
 
     private void sendParametersToServer() {
         BlockPos pos = blockEntity.getBlockPos();
-        int xr = parseInt(xRadius.getValue());
-        int ye = parseInt(yExtend.getValue());
-        int zr = parseInt(zRadius.getValue());
-        int xo = parseInt(xOffset.getValue());
-        int yo = parseInt(yOffset.getValue());
-        int zo = parseInt(zOffset.getValue());
+        // 范围参数使用非负解析
+        int xr = parseInt(xRadius.getValue(), false);
+        int ye = parseInt(yExtend.getValue(), false);
+        int zr = parseInt(zRadius.getValue(), false);
 
+        // 偏移参数允许负数
+        int xo = parseInt(xOffset.getValue(), true);
+        int yo = parseInt(yOffset.getValue(), true);
+        int zo = parseInt(zOffset.getValue(), true);
         PacketDistributor.sendToServer(new ScanAreaPayload(
                 pos, PumpMode.EXTRACTING_RANGE, xr, ye, zr, xo, yo, zo
         ));
