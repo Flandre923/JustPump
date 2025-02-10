@@ -1,0 +1,24 @@
+{
+  "button.mode": "切换模式",
+  "button.scan": "开始扫描",
+  "button.show_range": "预览范围",
+  "container.examplemod.pump": "泵",
+
+  "mode.auto": "自动抽取",
+  "mode.range": "范围模式",
+  "mode.fill": "填充模式",
+
+  "status.scanning": "扫描中...",
+  "status.complete": "已完成!",
+  "status.ready": "准备就绪",
+
+  "label.x_radius": "X轴半径",
+  "label.y_extend": "Y轴延伸",
+  "label.z_radius": "Z轴半径",
+  "label.x_offset": "X轴偏移",
+  "label.y_offset": "Y轴偏移",
+  "label.z_offset": "Z轴偏移",
+
+  "label.mode": "模式：",
+  "label.status": "状态："
+}

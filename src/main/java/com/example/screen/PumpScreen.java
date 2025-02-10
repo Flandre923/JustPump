@@ -10,8 +10,6 @@ import com.example.network.ScanStartPayload;
 import com.example.network.ToggleRangePayload;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -20,19 +18,19 @@ import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
-    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(ExampleMod.MODID, "textures/gui/pump.png");
+    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(ExampleMod.MODID, "textures/gui/pump_gui.png");
     private final PumpBlockEntity blockEntity;
     private Component modeText;
     private Component statusText;
 
     // 输入框组件
-    private EditBox xRadius;
-    private EditBox yExtend;
-    private EditBox zRadius;
-    private EditBox xOffset;
-    private EditBox yOffset;
-    private EditBox zOffset;
-    private Button showRangeButton;
+    private TextureEditBox xRadius;
+    private TextureEditBox yExtend;
+    private TextureEditBox zRadius;
+    private TextureEditBox xOffset;
+    private TextureEditBox yOffset;
+    private TextureEditBox zOffset;
+    private TextureButton showRangeButton;
 
 
     public PumpScreen(PumpMenu menu, Inventory inv, Component title) {
@@ -46,20 +44,25 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     protected void init() {
         super.init();
         // 左侧区域：按钮和状态
-        int leftX = this.leftPos + 10;
-        int buttonWidth = 25;
+        int buttonWidth = 31;
+        int buttonHeight = 15;
         // 模式切换按钮
-        addRenderableWidget(Button.builder(Component.translatable("button.mode"), button -> cycleMode())
-                .bounds(leftX, this.topPos + 35, buttonWidth, 15)
+        addRenderableWidget(TextureButton.builder(Component.translatable("button.mode"), button -> cycleMode())
+                .texture(TEXTURE)
+                .textureCoords(16,32)
+                .sourceSize(31,15)
+                .textureTotalSize(300,200)
+                .bounds(this.leftPos + 16, this.topPos + 32, buttonWidth, buttonHeight)
                 .build());
         // 开始扫描按钮
-        addRenderableWidget(Button.builder(Component.translatable("button.scan"), button -> onScanClicked())
-                .bounds(leftX, this.topPos + 65, buttonWidth, 15)
+        addRenderableWidget(TextureButton.builder(Component.translatable("button.scan"), button -> onScanClicked())
+                .texture(TEXTURE)
+                .textureCoords(16,32)
+                .sourceSize(31,15)
+                .textureTotalSize(300,200)
+                .bounds(this.leftPos + 16, this.topPos + 50, buttonWidth, buttonHeight)
                 .build());
-        // 右侧区域：输入框
-        int rightX = this.leftPos + 130;
-        int inputWidth = 50;
-        int inputHeight = 20;
+
         // 范围输入框
         createInputFields();
         // 设置默认值
@@ -71,10 +74,14 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         zOffset.setValue("0");
 
         // 显示范围按钮
-        showRangeButton = Button.builder(Component.translatable("button.show_range"), button -> {
+        showRangeButton = TextureButton.builder(Component.translatable("button.show_range"), button -> {
                     PacketDistributor.sendToServer(new ToggleRangePayload(this.blockEntity.getBlockPos(),ToggleRangePayload.TOGGLE));
                 })
-                .bounds(rightX, this.topPos + 80, 130, 20)
+                .texture(TEXTURE)
+                .textureCoords(16,32)
+                .sourceSize(31,15)
+                .textureTotalSize(300,200)
+                .bounds(this.leftPos+240, this.topPos + 115, 47, 15)
                 .build();
 
         addRenderableWidget(showRangeButton);
@@ -83,23 +90,24 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     }
 
     private void createInputFields() {
-        int rightX = this.leftPos + 130;
-        int inputWidth = 50;
+        int rightX = this.leftPos + 112;
+        int offsetRightX = this.leftPos + 208;
+        int inputWidth = 79;
 
         // 范围输入框（X半径0-64，Y延伸0-100，Z半径0-64）
-        xRadius = createNumberInput(rightX, this.topPos + 20, inputWidth, "X半径", false, 64);
-        yExtend = createNumberInput(rightX + 60, this.topPos + 20, inputWidth, "Y延伸", false, 100);
-        zRadius = createNumberInput(rightX + 120, this.topPos + 20, inputWidth, "Z半径", false, 64);
+        xRadius = createNumberInput(rightX,  this.topPos + 32, inputWidth, "label.x_radius", false, 64);
+        yExtend = createNumberInput(rightX , this.topPos + 64, inputWidth, "label.y_extend", false, 100);
+        zRadius = createNumberInput(rightX,  this.topPos + 96, inputWidth, "label..z_radius", false, 64);
 
         // 偏移输入框（允许负数，不做额外限制）
-        xOffset = createNumberInput(rightX, this.topPos + 50, inputWidth, "X偏移", true, Integer.MAX_VALUE);
-        yOffset = createNumberInput(rightX + 60, this.topPos + 50, inputWidth, "Y偏移", true, Integer.MAX_VALUE);
-        zOffset = createNumberInput(rightX + 120, this.topPos + 50, inputWidth, "Z偏移", true, Integer.MAX_VALUE);
+        xOffset = createNumberInput(offsetRightX, this.topPos + 32, inputWidth, "label.x_offset", true, Integer.MAX_VALUE);
+        yOffset = createNumberInput(offsetRightX, this.topPos + 64, inputWidth, "label.y_offset", true, Integer.MAX_VALUE);
+        zOffset = createNumberInput(offsetRightX, this.topPos + 96, inputWidth, "label.z_offset", true, Integer.MAX_VALUE);
     }
     // 修改后的创建方法（添加allowNegative参数）
-    private EditBox createNumberInput(int x, int y, int width, String label,
+    private TextureEditBox createNumberInput(int x, int y, int width, String label,
                                       boolean allowNegative, int maxValue) {
-        EditBox box = new EditBox(this.font, x, y, width, 20, Component.literal(label));
+        TextureEditBox box = new TextureEditBox(this.font, x, y, width, 15, Component.literal(label));
         box.setMaxLength(allowNegative ? 4 : String.valueOf(maxValue).length());
 
         // 根据参数设置不同过滤规则
@@ -185,11 +193,11 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
 
         // 扫描状态文本
         if(blockEntity.isScanning()) {
-            statusText = Component.translatable("status.scanning").withStyle(ChatFormatting.GOLD);
+            statusText = Component.translatable("status.scanning").withStyle(ChatFormatting.RED);
         } else if(blockEntity.isScanComplete()) {
             statusText = Component.translatable("status.complete").withStyle(ChatFormatting.GREEN);
         } else {
-            statusText = Component.translatable("status.ready").withStyle(ChatFormatting.GRAY);
+            statusText = Component.translatable("status.ready").withStyle(ChatFormatting.WHITE);
         }
     }
 
@@ -201,36 +209,84 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         PacketDistributor.sendToServer(new ScanStartPayload(mode,pos));
     }
 
+    private void renderText(GuiGraphics gui, Component text, int x, int y, int color, boolean shadow) {
+        gui.drawString(
+                this.font,      // 使用当前GUI的字体
+                text,           // 要渲染的文本组件
+                x, y,           // 屏幕坐标
+                color,          // 颜色（ARGB格式）
+                shadow          // 是否显示阴影
+        );
+    }
+    private void renderText(GuiGraphics gui, Component text, int x, int y,
+                            int color, boolean shadow, float scale) {
+        gui.pose().pushPose();
+        gui.pose().translate(x, y, 0);
+        gui.pose().scale(scale, scale, 1.0f);
+        gui.drawString(
+                this.font,
+                text,
+                0, 0,      // 坐标已通过translate处理
+                color,
+                shadow
+        );
+        gui.pose().popPose();
+    }
+
+
+
     @Override
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-//        super.renderLabels(guiGraphics, mouseX, mouseY);
-        // 绘制标题和状态文字
-        guiGraphics.drawString(
-                this.font,
+        renderAreaTips(guiGraphics,mouseX,mouseY);
+        renderText(guiGraphics,
+                Component.translatable("label.mode"),
+                64, 24,
+                0xFFFFFF, false,0.75f
+        );
+
+        // 绘制状态标签
+        renderText(guiGraphics,
+                Component.translatable("label.status"),
+                64, 56,
+                0xFFFFFF, false,0.75f
+        );
+
+        // 绘制标题
+        renderText(guiGraphics,
                 this.title,
-                this.titleLabelX,
-                this.titleLabelY,
-                0xFFFFFF, // 灰色文本颜色
-                false // 不使用阴影
+                this.titleLabelX, this.titleLabelY,
+                0xFFFFFF, false
         );
 
-        // 模式状态（居中绘制）
-        guiGraphics.drawCenteredString(
-                this.font,
+        // 绘制模式状态
+        renderText(guiGraphics,
                 modeText,
-                10,
-                13 ,
-                0xFFFFFF // 白色
+                64, 32,
+                0xFFFFFF, false
         );
 
-        // 扫描状态（居中绘制）
-        guiGraphics.drawCenteredString(
-                this.font,
+        // 绘制扫描状态
+        renderText(guiGraphics,
                 statusText,
-                10,
-                 18,
-                0xFFFFFF // 白色
+                64, 64,
+                0xFFFFFF, false
         );
+    }
+
+    public void renderAreaTips(GuiGraphics guiGraphics, int mouseX, int mouseY)
+    {
+        if(this.blockEntity.getPumpMode() == PumpMode.EXTRACTING_RANGE || this.blockEntity.getPumpMode() == PumpMode.FILLING)
+        {
+            // 输入框标签组 - 右侧
+            renderText(guiGraphics, Component.translatable("label.x_radius"), 112, 25, 0xFFFFFF, false,0.75f);
+            renderText(guiGraphics, Component.translatable("label.y_extend"), 112, 56, 0xFFFFFF, false,0.75f);
+            renderText(guiGraphics, Component.translatable("label.z_radius"), 112, 90, 0xFFFFFF, false,0.75f);
+            // 偏移量标签组 - 更右侧
+            renderText(guiGraphics, Component.translatable("label.x_offset"), 208, 25, 0xFFFFFF, false,0.75f);
+            renderText(guiGraphics, Component.translatable("label.y_offset"), 208, 56, 0xFFFFFF, false,0.75f);
+            renderText(guiGraphics, Component.translatable("label.z_offset"), 208, 90, 0xFFFFFF, false,0.75f);
+
+        }
     }
 
     @Override
@@ -254,15 +310,16 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         // 绘制主背景
         guiGraphics.blit(
                 TEXTURE, // 你的纹理资源位置
-                x, y,
+                leftPos, topPos,
+                300,144,
                 0, 0,
-                imageWidth, imageHeight
+                300, 144,
+                300,200
         );
     }
-    private boolean isEditing = false;
 
     public void updateInputFields(BlockPos area, BlockPos offset) {
-        if (getFocused() instanceof EditBox) {
+        if (getFocused() instanceof TextureEditBox) {
             return;
         }
         xRadius.setValue(String.valueOf(area.getX()));
@@ -277,30 +334,21 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         boolean result = super.mouseClicked(mouseX, mouseY, button);
-        // 检测到点击输入框时标记编辑状态
-        if (getFocused() instanceof EditBox) {
-            isEditing = true;
-        }
         return result;
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // 当用户输入时重置同步标记
-        if (getFocused() instanceof EditBox) {
-            isEditing = true;
-//            menu.hasSentData = false;
-        }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
 
+    @Override
     public void onClose() {
         // 在关闭界面时同步数据
         sendParametersToServer();
         super.onClose();
     }
-
 
     private void sendParametersToServer() {
         BlockPos pos = blockEntity.getBlockPos();

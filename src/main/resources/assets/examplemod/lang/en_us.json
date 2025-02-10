@@ -2,7 +2,27 @@
   "itemGroup.examplemod": "Example Mod Tab",
   "block.examplemod.example_block": "Example Block",
   "item.examplemod.example_item": "Example Item",
-  "mode.examplemod.range": "Range Extraction",
-  "mode.examplemod.auto": "Auto Extraction",
-  "mode.examplemod.filling": "Fluid Filling"
+  "button.mode": "Mode",
+  "button.scan": "Scan",
+  "button.show_range": "Preview",
+  "container.examplemod.pump": "Pump",
+
+  "mode.auto": "Auto",
+  "mode.range": "Range",
+  "mode.fill": "Fill",
+
+  "status.scanning": "Scanning...",
+  "status.complete": "Complete!",
+  "status.ready": "Ready",
+
+  "label.x_radius": "X Radius",
+  "label.y_extend": "Y Extend",
+  "label.z_radius": "Z Radius",
+  "label.x_offset": "X Offset",
+  "label.y_offset": "Y Offset",
+  "label.z_offset": "Z Offset",
+
+  "label.mode": "mode：",
+  "label.status": "status："
+
 }
