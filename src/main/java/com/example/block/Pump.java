@@ -1,6 +1,7 @@
 package com.example.block;
 
 import com.example.blockentitiy.PumpBlockEntity;
+import com.example.blockentitiy.visiable.VisiableHelper;
 import com.example.network.ModeUpdatePayload;
 import com.example.network.ScanStartPayload;
 import com.example.reg.BlockEntityRegister;
@@ -48,6 +49,9 @@ public class Pump extends BaseEntityBlock {
             if(be instanceof PumpBlockEntity pump)
             {
                 level.updateNeighborsAt(pos,this);
+                if(pump.getAreaDisplay().isActive())
+                    pump.closeDisplay();
+
             }
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
