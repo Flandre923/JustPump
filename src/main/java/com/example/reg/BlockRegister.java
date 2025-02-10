@@ -15,7 +15,7 @@ public class BlockRegister {
             BLOCKS.registerBlock("pump_block",(properties -> new Pump()));
 
     public static final DeferredBlock<Block> VISIABLE_BLOCK =
-            BLOCKS.registerBlock("visiable_block",(properties -> new Block(properties)));
+            BLOCKS.registerBlock("visiable_block",(properties -> new Block(properties.strength(0.1f).noOcclusion())));
     public static void register(IEventBus eventBus) {
         BLOCKS.register(eventBus);
     }
