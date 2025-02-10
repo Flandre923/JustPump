@@ -13,7 +13,7 @@ public class ItemRegister {
 
 
     public static final DeferredItem<BlockItem> PUMP_ITEM = ITEMS.register(
-            "pump",
+            "pump_block",
             () -> new BlockItem(BlockRegister.PUMP_BLOCK.get(), new Item.Properties())
     );
 

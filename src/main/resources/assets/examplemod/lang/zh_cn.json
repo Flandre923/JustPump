@@ -20,5 +20,7 @@
   "label.z_offset": "Z轴偏移",
 
   "label.mode": "模式：",
-  "label.status": "状态："
+  "label.status": "状态：",
+  "block.examplemod.pump_block": "泵"
+
 }

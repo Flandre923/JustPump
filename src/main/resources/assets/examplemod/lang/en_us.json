@@ -23,6 +23,7 @@
   "label.z_offset": "Z Offset",
 
   "label.mode": "mode：",
-  "label.status": "status："
+  "label.status": "status：",
+  "block.examplemod.pump_block": "Pump"
 
 }

@@ -51,7 +51,6 @@ public class Pump extends BaseEntityBlock {
                 level.updateNeighborsAt(pos,this);
                 if(pump.getAreaDisplay().isActive())
                     pump.closeDisplay();
-
             }
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
