@@ -1,7 +1,5 @@
 {
-  "itemGroup.examplemod": "Example Mod Tab",
-  "block.examplemod.example_block": "Example Block",
-  "item.examplemod.example_item": "Example Item",
+  "itemGroup.examplemod": "JustPump Tab",
   "button.mode": "Mode",
   "button.scan": "Scan",
   "button.show_range": "Preview",
