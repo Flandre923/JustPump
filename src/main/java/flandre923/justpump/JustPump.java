@@ -28,7 +28,7 @@ public class JustPump
 
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> EXAMPLE_TAB = CREATIVE_MODE_TABS.register("example_tab", () -> CreativeModeTab.builder()
-            .title(Component.translatable("itemGroup.examplemod"))
+            .title(Component.translatable("itemGroup.justpump"))
             .icon(() -> ItemRegister.PUMP_ITEM.get().getDefaultInstance())
             .displayItems((parameters, output) -> {
                 output.accept(ItemRegister.PUMP_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event

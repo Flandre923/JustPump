@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "B": {
+      "item": "minecraft:bamboo"
+    },
+    "C": {
+      "item": "minecraft:copper_block"
+    },
+    "K": {
+      "item": "minecraft:dried_kelp_block"
+    }
+  },
+  "pattern": [
+    " C ",
+    " K ",
+    " B "
+  ],
+  "result": {
+    "count": 1,
+    "id": "justpump:pump_block"
+  }
+}
