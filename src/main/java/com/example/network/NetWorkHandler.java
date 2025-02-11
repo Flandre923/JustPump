@@ -29,5 +29,6 @@ public class NetWorkHandler {
         registrar.playToClient(SyncAreaDataPayload.TYPE,SyncAreaDataPayload.STREAM_CODEC,SyncAreaDataPayload::handleScanPacket);
         registrar.playToServer(ScanStartPayload.TYPE,ScanStartPayload.STREAM_CODEC,ScanStartPayload::handleScanStartPayload);
         registrar.playToServer(ToggleRangePayload.TYPE,ToggleRangePayload.STREAM_CODEC,ToggleRangePayload::handle);
+        registrar.playToClient(SyncRangeDisplayPacket.TYPE,SyncRangeDisplayPacket.STREAM_CODEC,SyncRangeDisplayPacket::handleClient);
     }
 }

@@ -40,12 +40,15 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import org.jetbrains.annotations.Nullable;
 
+import javax.swing.event.CaretListener;
 import java.util.*;
 
 public class PumpBlockEntity extends BlockEntity implements MenuProvider {
@@ -74,6 +77,10 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     }
     public PumpBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState blockState) {
         super(type, pos, blockState);
+    }
+
+    public boolean isRangeVisible() {
+        return this.getAreaDisplay().isActive();
     }
 
     private static class FluidPosition {
@@ -725,6 +732,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     public void setPumpMode(PumpMode mode) {
         this.pumpMode = mode;
     }
+
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {

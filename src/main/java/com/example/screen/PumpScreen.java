@@ -31,6 +31,7 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     private TextureEditBox yOffset;
     private TextureEditBox zOffset;
     private TextureButton showRangeButton;
+    private Component rangeDisplayStatus;
 
 
     public PumpScreen(PumpMenu menu, Inventory inv, Component title) {
@@ -76,6 +77,7 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         // 显示范围按钮
         showRangeButton = TextureButton.builder(Component.translatable("button.show_range"), button -> {
                     PacketDistributor.sendToServer(new ToggleRangePayload(this.blockEntity.getBlockPos(),ToggleRangePayload.TOGGLE));
+                    updateStatusText();
                 })
                 .texture(TEXTURE)
                 .textureCoords(16,32)
@@ -199,6 +201,11 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         } else {
             statusText = Component.translatable("status.ready").withStyle(ChatFormatting.WHITE);
         }
+
+        boolean isShowing = blockEntity.isRangeVisible(); // 假设BlockEntity有此方法
+        Component status = Component.translatable(isShowing ? "status.show.on" : "status.show.off")
+                .withStyle(isShowing ? ChatFormatting.GREEN : ChatFormatting.RED);
+        rangeDisplayStatus = Component.translatable("label.show_status", status);
     }
 
     private void onScanClicked() {
@@ -238,6 +245,14 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     @Override
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         renderAreaTips(guiGraphics,mouseX,mouseY);
+
+        renderText(guiGraphics,
+                rangeDisplayStatus,
+                198, 118,
+                0xFFFFFF, false, 0.75f
+        );
+
+        //
         renderText(guiGraphics,
                 Component.translatable("label.mode"),
                 64, 24,

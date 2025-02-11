@@ -22,6 +22,9 @@
 
   "label.mode": "mode：",
   "label.status": "status：",
-  "block.examplemod.pump_block": "Pump"
+  "block.examplemod.pump_block": "Pump",
 
+  "status.show.on": "ON",
+  "status.show.off": "OFF",
+  "label.show_status": "Show: %s"
 }

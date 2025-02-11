@@ -22,6 +22,11 @@
 
   "label.mode": "模式：",
   "label.status": "状态：",
-  "block.examplemod.pump_block": "泵"
+  "block.examplemod.pump_block": "泵",
+
+
+  "status.show.on": "开",
+  "status.show.off": "关",
+  "label.show_status": "范围显示: %s"
 
 }
