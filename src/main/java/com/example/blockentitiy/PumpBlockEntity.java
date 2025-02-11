@@ -2,6 +2,7 @@ package com.example.blockentitiy;
 
 import com.example.ExampleMod;
 import com.example.block.Pump;
+import com.example.blockentitiy.help.AreaPosition;
 import com.example.blockentitiy.help.SimpleSwitch;
 import com.example.blockentitiy.visiable.VisiableHelper;
 import com.example.helper.CuboidFluidScanner;
@@ -10,6 +11,9 @@ import com.example.helper.FluidFillScanner;
 import com.example.helper.Helper;
 import com.example.helper.data.FluidResult;
 import com.example.menu.PumpMenu;
+import com.example.network.ScanAreaPayload;
+import com.example.network.SyncAreaDataPayload;
+import com.example.network.SyncScanStatePacket;
 import com.example.reg.BlockEntityRegister;
 import com.example.reg.BlockRegister;
 import it.unimi.dsi.fastutil.Pair;
@@ -31,6 +35,7 @@ import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -46,6 +51,8 @@ import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.network.PacketDistributor;
+import org.apache.logging.log4j.core.jmx.Server;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.event.CaretListener;
@@ -66,22 +73,51 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     private boolean scanning = false;
     private boolean scanComplete = false;
 
-    private BlockPos currentArea = new BlockPos(10, 10, 10);
-    private BlockPos currentOffset = BlockPos.ZERO;
-    private static final int INTERNAL_STORAGE_BUCKETS = 16;
     private FluidFillScanner fluidFillScanner;
-
+    private final AreaPosition areaPosition = new AreaPosition();
 
     public PumpBlockEntity(BlockPos pos, BlockState state) {
         this(BlockEntityRegister.PUMP_BE.get(), pos, state);
     }
     public PumpBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState blockState) {
         super(type, pos, blockState);
+
+        // 添加回调监听
+        areaPosition.setCallback(new AreaPosition.PositionChangeCallback() {
+            @Override
+            public void onAreaChanged(BlockPos newArea) {
+                handlePositionChange();
+            }
+
+            @Override
+            public void onOffsetChanged(BlockPos newOffset) {
+                handlePositionChange();
+            }
+
+            private void handlePositionChange() {
+                if (areaDisplay.isActive()) {
+//                    updateAreaDisplay();
+                }
+                syncParameters();
+                setChanged();
+            }
+        });
+
     }
 
     public boolean isRangeVisible() {
         return this.getAreaDisplay().isActive();
     }
+
+
+    public void setScanning(boolean scanning) {
+        this.scanning = scanning;
+    }
+
+    public void setScanComplete(boolean scanComplete) {
+        this.scanComplete = scanComplete;
+    }
+
 
     private static class FluidPosition {
         final Fluid type;
@@ -170,30 +206,33 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
 
     // 范围显示
     public SimpleSwitch areaDisplay = new SimpleSwitch();
-
     public SimpleSwitch getAreaDisplay()
     {
         return areaDisplay;
     }
-
     public void switchAreaDisplay(){
         areaDisplay.toggle();
         setChanged();
-        Pair<BlockPos,BlockPos> area = Helper.calculateScanRange(this.getBlockPos(),this.currentArea,this.currentOffset);
-        if(areaDisplay.isActive())
-        {
-            VisiableHelper.placeHollowCube(level, BlockRegister.VISIABLE_BLOCK.get(),area.first(),area.second());
-        }
-        else
-        {
-            VisiableHelper.removeHollowCube(level,BlockRegister.VISIABLE_BLOCK.get(),area.first(),area.second());
+        Pair<BlockPos,BlockPos> area = Helper.calculateScanRange(
+                this.getBlockPos(),
+                areaPosition.getCurrentArea(),
+                areaPosition.getCurrentOffset()
+        );
+        if(areaDisplay.isActive()) {
+            VisiableHelper.placeHollowCube(level, BlockRegister.VISIABLE_BLOCK.get(), area.first(), area.second());
+        } else {
+            VisiableHelper.removeHollowCube(level, BlockRegister.VISIABLE_BLOCK.get(), area.first(), area.second());
         }
     }
 
     public void closeDisplay(){
         if(this.areaDisplay.isActive())
         {
-            Pair<BlockPos,BlockPos> area = Helper.calculateScanRange(this.getBlockPos(),this.currentArea,this.currentOffset);
+            Pair<BlockPos,BlockPos> area = Helper.calculateScanRange(
+                    this.getBlockPos(),
+                    areaPosition.getCurrentArea(),
+                    areaPosition.getCurrentOffset()
+            );
             this.areaDisplay.toggle();
             VisiableHelper.removeHollowCube(level,BlockRegister.VISIABLE_BLOCK.get(),area.first(),area.second());
         }
@@ -468,32 +507,49 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     public void handleArea(PumpMode mode, int xRadius, int yExtend, int zRadius,
                            int xOffset, int yOffset, int zOffset)
     {
+        if (this.pumpMode != mode) return;
         if (areaDisplay.isActive()) {
             Pair<BlockPos, BlockPos> oldArea = Helper.calculateScanRange(
                     this.getBlockPos(),
-                    this.currentArea,
-                    this.currentOffset
+                    areaPosition.getCurrentArea(),
+                    areaPosition.getCurrentOffset()
             );
             VisiableHelper.removeHollowCube(level, BlockRegister.VISIABLE_BLOCK.get(),
                     oldArea.first(), oldArea.second());
         }
-
-        updateParameters(xRadius, yExtend, zRadius, xOffset, yOffset, zOffset);
-
+        // 使用AreaPosition的方法更新参数
+        areaPosition.setCurrentArea(new BlockPos(xRadius, yExtend, zRadius));
+        areaPosition.setCurrentOffset(new BlockPos(xOffset, yOffset, zOffset));
         // 如果显示需要保持激活状态，显示新范围
         if (areaDisplay.isActive()) {
             Pair<BlockPos, BlockPos> newArea = Helper.calculateScanRange(
                     this.getBlockPos(),
-                    this.currentArea,
-                    this.currentOffset
+                    areaPosition.getCurrentArea(),
+                    areaPosition.getCurrentOffset()
             );
             VisiableHelper.placeHollowCube(level, BlockRegister.VISIABLE_BLOCK.get(),
                     newArea.first(), newArea.second());
         }
     }
+
+    private void syncParameters() {
+        if (level instanceof ServerLevel serverLevel) {
+            PacketDistributor.sendToPlayersTrackingChunk(serverLevel,
+                    level.getChunk(worldPosition).getPos(),new ScanAreaPayload(
+                            getBlockPos(),
+                            pumpMode,
+                            areaPosition.getCurrentArea().getX(),
+                            areaPosition.getCurrentArea().getY(),
+                            areaPosition.getCurrentArea().getZ(),
+                            areaPosition.getCurrentOffset().getX(),
+                            areaPosition.getCurrentOffset().getY(),
+                            areaPosition.getCurrentOffset().getZ()
+                    ));
+        }
+    }
+
     public void handleScan(PumpMode mode) {
         if (level == null || level.isClientSide) return;
-
         switch (mode) {
             case EXTRACTING_AUTO -> startAutoScan();
             case EXTRACTING_RANGE -> startRangeScan();
@@ -506,8 +562,8 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         resetScanners();
         Pair<BlockPos, BlockPos> scanRange = Helper.calculateScanRange(
                 getBlockPos(),
-                currentArea,
-                currentOffset
+                areaPosition.getCurrentArea(),
+                areaPosition.getCurrentOffset()
         );
         pendingPositions.clear();
         fluidFillScanner = new FluidFillScanner(level, scanRange.first(), scanRange.second());
@@ -519,7 +575,9 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
                         pendingPositions.add(new FluidPosition(tank.fluidType, pos));
                     }
                 });
+                scanning = false;
                 scanComplete = true;
+                syncScanState(); // 新增同步调用
                 this.setChanged();
             }
         });
@@ -531,12 +589,6 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     }
 
 
-    public void updateParameters(int xr, int ye, int zr, int xo, int yo, int zo) {
-        this.currentArea = new BlockPos(xr, ye, zr);
-        this.currentOffset = new BlockPos(xo, yo, zo);
-        this.markParametersDirty();
-        this.setChanged();
-    }
     private void processScanResult(FluidResult result) {
         if (level instanceof ServerLevel) {
             result.getAllPositions().forEach(pos -> {
@@ -561,9 +613,9 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             fluidClusterScanner.setProgressListener(result -> {
                 currentResult = result;
                 processScanResult(result);
-                handleScanResult();
                 scanning = false;
                 scanComplete = true;
+                syncScanState(); // 新增同步调用
                 this.setChanged();
             });
         }
@@ -580,16 +632,16 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         resetScanners(); // 根据参数计算新的扫描范围
         Pair<BlockPos, BlockPos> scanRange = Helper.calculateScanRange(
                 getBlockPos(),
-                currentArea,
-                currentOffset
+                areaPosition.getCurrentArea(),
+                areaPosition.getCurrentOffset()
         );
-        this.cuboidFluidScanner = new CuboidFluidScanner(level, scanRange.first(), scanRange.second(),this.currentArea,this.currentOffset);
+        this.cuboidFluidScanner = new CuboidFluidScanner(level, scanRange.first(), scanRange.second(),areaPosition.getCurrentArea(),areaPosition.getCurrentOffset());
         cuboidFluidScanner.setProgressListener(result -> {
             currentResult = result;
             processScanResult(result);
-            handleScanResult();
             scanning = false;
             scanComplete = true;
+            syncScanState(); // 新增同步调用
             markParametersDirty();
             this.setChanged();
         });
@@ -614,11 +666,11 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
     }
 
     public void switchMode() {
-        if (areaDisplay.isActive() && level != null) {
+        if (areaDisplay.isActive() && level != null && !level.isClientSide) {
             Pair<BlockPos, BlockPos> currentArea = Helper.calculateScanRange(
                     getBlockPos(),
-                    this.currentArea,
-                    this.currentOffset
+                    areaPosition.getCurrentArea(),
+                    areaPosition.getCurrentOffset()
             );
             VisiableHelper.removeHollowCube(
                     level,
@@ -634,6 +686,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         this.pumpMode = pumpMode.next();
         this.scanComplete = false;
         this.scanning = false;
+        syncScanState();
         this.setChanged();
         this.tank.clear();
     }
@@ -703,17 +756,31 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         return success;
     }
 
-
-
+    private void syncScanState() {
+        if (level != null && !level.isClientSide) {
+            ChunkPos chunkPos = new ChunkPos(getBlockPos());
+            SyncScanStatePacket packet = new SyncScanStatePacket(
+                    getBlockPos(),
+                    scanning,
+                    scanComplete
+            );
+            PacketDistributor.  // 使用你提供的发包方法
+                    sendToPlayersTrackingChunk(
+                    (ServerLevel) level,
+                    chunkPos,
+                    packet
+            );
+        }
+    }
 
     public void markParametersDirty() {
         setChanged();
     }
 
     public Optional<Pair<BlockPos, BlockPos>> getRangeParameters() {
-        if(this.currentArea != null && this.currentOffset!=null)
+        if(areaPosition != null  && areaPosition.getCurrentArea() != null && areaPosition.getCurrentOffset()!=null)
         {
-            return Optional.of(Pair.of(this.currentArea,this.currentOffset));
+            return Optional.of(Pair.of(areaPosition.getCurrentArea(),areaPosition.getCurrentOffset()));
         }
         return Optional.empty();
     }
@@ -763,11 +830,6 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             pendingPositions.add(new FluidPosition(fluid, pos));
         });
 
-        if (tag.contains("ScanParams")) {
-            CompoundTag params = tag.getCompound("ScanParams");
-            NbtUtils.readBlockPos(params,"Area").ifPresent(pos -> currentArea = pos);
-            NbtUtils.readBlockPos(params,"Offset").ifPresent(pos -> currentOffset = pos);
-        }
         // 加载扫描状态
         scanning = tag.getBoolean(SCANNING_KEY);
         scanComplete = tag.getBoolean(SCAN_COMPLETE_KEY);
@@ -777,6 +839,10 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             CompoundTag resultTag = tag.getCompound(RESULT_DATA_KEY);
             currentResult = new FluidResult(resultTag);
         }
+
+        if (tag.contains("AreaPosition")) {
+            areaPosition.load(tag.getCompound("AreaPosition"));
+        }
     }
 
     @Override
@@ -785,6 +851,7 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         tag.putString("PumpMode", pumpMode.name());
 
         tag.put("AreaDisplay", areaDisplay.toNBT());
+
         tag.put("Tank", tank.writeToNBT());
 
         ListTag queueTag = new ListTag();
@@ -796,10 +863,6 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
         });
         tag.put("Queue", queueTag);
 
-        CompoundTag params = new CompoundTag();
-        params.put("Area",NbtUtils.writeBlockPos(currentArea));
-        params.put("Offset",NbtUtils.writeBlockPos(currentOffset));
-        tag.put("ScanParams", params);
         // 保存扫描状态
         tag.putBoolean(SCANNING_KEY, scanning);
         tag.putBoolean(SCAN_COMPLETE_KEY, scanComplete);
@@ -810,5 +873,8 @@ public class PumpBlockEntity extends BlockEntity implements MenuProvider {
             currentResult.save(resultTag);
             tag.put(RESULT_DATA_KEY, resultTag);
         }
+
+        tag.put("AreaPosition", areaPosition.save());
+
     }
 }

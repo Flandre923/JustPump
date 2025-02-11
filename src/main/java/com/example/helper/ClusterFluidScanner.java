@@ -5,6 +5,7 @@ import com.google.common.collect.Queues;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -49,6 +50,9 @@ public class ClusterFluidScanner extends FluidScanner{
             checkPos.move(Direction.DOWN);
         }
         isCompleted = true;
+        if (listener != null) {
+            listener.onScanComplete(new FluidResult(false, Collections.emptyList()));
+        }
     }
 
     public void tick() {

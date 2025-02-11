@@ -3,6 +3,7 @@ package com.example.screen;
 import com.example.ExampleMod;
 import com.example.blockentitiy.PumpBlockEntity;
 import com.example.blockentitiy.PumpMode;
+import com.example.client.ClientAreaOffsetHelper;
 import com.example.menu.PumpMenu;
 import com.example.network.ModeUpdatePayload;
 import com.example.network.ScanAreaPayload;
@@ -16,6 +17,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.neoforge.network.PacketDistributor;
+
 
 public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(ExampleMod.MODID, "textures/gui/pump_gui.png");
@@ -37,17 +39,15 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     public PumpScreen(PumpMenu menu, Inventory inv, Component title) {
         super(menu, inv, title);
         this.blockEntity = menu.getBlockEntity();
-        this.imageWidth = 300;  // 加宽界面
+        this.imageWidth = 300;
         this.imageHeight = 200;
     }
 
     @Override
     protected void init() {
         super.init();
-        // 左侧区域：按钮和状态
         int buttonWidth = 31;
         int buttonHeight = 15;
-        // 模式切换按钮
         addRenderableWidget(TextureButton.builder(Component.translatable("button.mode"), button -> cycleMode())
                 .texture(TEXTURE)
                 .textureCoords(16,32)
@@ -67,17 +67,11 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         // 范围输入框
         createInputFields();
         // 设置默认值
-        xRadius.setValue("10");
-        yExtend.setValue("10");
-        zRadius.setValue("10");
-        xOffset.setValue("0");
-        yOffset.setValue("0");
-        zOffset.setValue("0");
-
+        updateInputFieldsFromBlockEntity();
         // 显示范围按钮
         showRangeButton = TextureButton.builder(Component.translatable("button.show_range"), button -> {
                     PacketDistributor.sendToServer(new ToggleRangePayload(this.blockEntity.getBlockPos(),ToggleRangePayload.TOGGLE));
-                    updateStatusText();
+                    sendParametersToServer();
                 })
                 .texture(TEXTURE)
                 .textureCoords(16,32)
@@ -89,6 +83,14 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         addRenderableWidget(showRangeButton);
         updateComponentVisibility();
         updateStatusText();
+    }
+    public void updateInputFieldsFromBlockEntity() {
+        xRadius.setValue(String.valueOf(ClientAreaOffsetHelper.getArea().getX()));
+        yExtend.setValue(String.valueOf(ClientAreaOffsetHelper.getArea().getY()));
+        zRadius.setValue(String.valueOf(ClientAreaOffsetHelper.getArea().getZ()));
+        xOffset.setValue(String.valueOf(ClientAreaOffsetHelper.getOffset().getX()));
+        yOffset.setValue(String.valueOf(ClientAreaOffsetHelper.getOffset().getY()));
+        zOffset.setValue(String.valueOf(ClientAreaOffsetHelper.getOffset().getZ()));
     }
 
     private void createInputFields() {
@@ -194,9 +196,9 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
         }
 
         // 扫描状态文本
-        if(blockEntity.isScanning()) {
+        if(ClientAreaOffsetHelper.isScanning) {
             statusText = Component.translatable("status.scanning").withStyle(ChatFormatting.RED);
-        } else if(blockEntity.isScanComplete()) {
+        } else if(ClientAreaOffsetHelper.isScanComplete) {
             statusText = Component.translatable("status.complete").withStyle(ChatFormatting.GREEN);
         } else {
             statusText = Component.translatable("status.ready").withStyle(ChatFormatting.WHITE);
@@ -245,13 +247,14 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     @Override
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         renderAreaTips(guiGraphics,mouseX,mouseY);
-
-        renderText(guiGraphics,
-                rangeDisplayStatus,
-                198, 118,
-                0xFFFFFF, false, 0.75f
-        );
-
+        if(this.blockEntity.getPumpMode() == PumpMode.EXTRACTING_RANGE || this.blockEntity.getPumpMode() == PumpMode.FILLING)
+        {
+            renderText(guiGraphics,
+                    rangeDisplayStatus,
+                    198, 118,
+                    0xFFFFFF, false, 0.75f
+            );
+        }
         //
         renderText(guiGraphics,
                 Component.translatable("label.mode"),
@@ -334,15 +337,14 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     }
 
     public void updateInputFields(BlockPos area, BlockPos offset) {
-        if (getFocused() instanceof TextureEditBox) {
-            return;
+        if (getFocused() == null || !(getFocused() instanceof TextureEditBox)) {
+            xRadius.setValue(String.valueOf(area.getX()));
+            yExtend.setValue(String.valueOf(area.getY()));
+            zRadius.setValue(String.valueOf(area.getZ()));
+            xOffset.setValue(String.valueOf(offset.getX()));
+            yOffset.setValue(String.valueOf(offset.getY()));
+            zOffset.setValue(String.valueOf(offset.getZ()));
         }
-        xRadius.setValue(String.valueOf(area.getX()));
-        yExtend.setValue(String.valueOf(area.getY()));
-        zRadius.setValue(String.valueOf(area.getZ()));
-        xOffset.setValue(String.valueOf(offset.getX()));
-        yOffset.setValue(String.valueOf(offset.getY()));
-        zOffset.setValue(String.valueOf(offset.getZ()));
     }
 
 
@@ -366,20 +368,35 @@ public class PumpScreen extends AbstractContainerScreen<PumpMenu> {
     }
 
     private void sendParametersToServer() {
+        if (!isValidInput()) return;
+
         BlockPos pos = blockEntity.getBlockPos();
-        // 范围参数使用非负解析
         int xr = parseInt(xRadius.getValue(), false);
         int ye = parseInt(yExtend.getValue(), false);
         int zr = parseInt(zRadius.getValue(), false);
 
-        // 偏移参数允许负数
         int xo = parseInt(xOffset.getValue(), true);
         int yo = parseInt(yOffset.getValue(), true);
         int zo = parseInt(zOffset.getValue(), true);
         PacketDistributor.sendToServer(new ScanAreaPayload(
-                pos, PumpMode.EXTRACTING_RANGE, xr, ye, zr, xo, yo, zo
+                pos,
+                blockEntity.getPumpMode(), // 使用当前实际模式
+                xr, ye, zr, xo, yo, zo
         ));
     }
 
+    private boolean isValidInput() {
+        try {
+            parseInt(xRadius.getValue(), false);
+            parseInt(yExtend.getValue(), false);
+            parseInt(zRadius.getValue(), false);
+            parseInt(xOffset.getValue(), true);
+            parseInt(yOffset.getValue(), true);
+            parseInt(zOffset.getValue(), true);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
 
 }

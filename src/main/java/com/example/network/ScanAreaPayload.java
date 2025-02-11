@@ -1,8 +1,12 @@
 package com.example.network;
 
+import ca.weblite.objc.Client;
 import com.example.ExampleMod;
 import com.example.blockentitiy.PumpBlockEntity;
 import com.example.blockentitiy.PumpMode;
+import com.example.client.ClientAreaOffsetHelper;
+import com.example.screen.PumpScreen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -49,12 +53,35 @@ public record ScanAreaPayload(BlockPos pos, PumpMode mode, int xRadius,
     }
 
 
-    public static void handleScanPacket(ScanAreaPayload payload, IPayloadContext ctx) {
+    public static void handleScanPacket(ScanAreaPayload packet, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            if (ctx.player().level().getBlockEntity(payload.pos()) instanceof PumpBlockEntity be) {
-                be.handleArea(payload.mode, payload.xRadius(), payload.yExtend(), payload.zRadius(),
-                        payload.xOffset(), payload.yOffset(), payload.zOffset());
-            }
+            ctx.enqueueWork(()->{
+                if (ctx.player().level().getBlockEntity(packet.pos()) instanceof PumpBlockEntity be) {
+                    // 只在模式匹配时更新
+                    if (be.getPumpMode() == packet.mode()) {
+                        if (!ctx.player().level().isClientSide){
+                            be.handleArea(
+                                    packet.mode(),
+                                    packet.xRadius(), packet.yExtend(), packet.zRadius(),
+                                    packet.xOffset(), packet.yOffset(), packet.zOffset()
+                            );
+
+                        }
+                        if (ctx.player().level().isClientSide) {
+
+                            ClientAreaOffsetHelper.setArea(new BlockPos(packet.xRadius(), packet.yExtend(), packet.zRadius()));
+                            ClientAreaOffsetHelper.setOffset(new BlockPos(packet.xOffset(), packet.yOffset(), packet.zOffset()));
+
+                            if(Minecraft.getInstance().screen instanceof PumpScreen screen){
+                                screen.updateInputFields(
+                                        new BlockPos(packet.xRadius(), packet.yExtend(), packet.zRadius()),
+                                        new BlockPos(packet.xOffset(), packet.yOffset(), packet.zOffset())
+                                );
+                            }
+                        }
+                    }
+                }
+            });
         });
     }
 }
